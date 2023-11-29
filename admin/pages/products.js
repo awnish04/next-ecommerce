@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 export default function Products() {
   const [products, setProducts] = useState([]);
+
   useEffect(() => {
     axios.get("/api/products").then((response) => {
       setProducts(response.data);
@@ -24,8 +25,8 @@ export default function Products() {
         </thead>
         <tbody>
           {products.map((product) => (
-            <tr>
-              <td>{product.title}</td>
+            <tr key={product._id}>
+              <td >{product.title}</td>
               <td>
                 <Link href={"/products/edit/" + product._id}>
                   <svg

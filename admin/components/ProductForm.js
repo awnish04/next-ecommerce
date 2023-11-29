@@ -179,83 +179,54 @@
 // }
 import { useRouter } from "next/router";
 import axios from "axios";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useEffect, useState } from "react";
-import { initializeApp } from "firebase/app";
-import { firebaseConfig } from "../config/firebase-config";
+// import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+// import { initializeApp } from "firebase/app";
+// import { firebaseConfig } from "../config/firebase-config";
 
 export default function ProductForm({
   _id,
   title: existingTitle,
   description: existingDescription,
   price: existingPrice,
-  productImages: propProductImages,
+  images,
 }) {
   const [title, setTitle] = useState(existingTitle || "");
   const [description, setDescription] = useState(existingDescription || "");
   const [price, setPrice] = useState(existingPrice || "");
   const [goToProducts, setGoToProducts] = useState(false);
-  const [productImages, setProductImages] = useState();
   const router = useRouter();
 
-  const app = initializeApp(firebaseConfig);
-  const storage = getStorage(app);
-
-  useEffect(() => {
-    uploadFiles();
-  }, [productImages]);
-
-  const uploadFiles = async () => {
-    if (!productImages || productImages.length === 0 || !storage) {
-      console.error("Firebase Storage is not initialized.");
-      return;
-    }
-
-    const links = await Promise.all(
-      productImages.map(async (image) => {
-        if (!storage) {
-          console.error("Firebase Storage is not initialized.");
-          return null;
-        }
-
-        const productImagesRef = ref(storage, `/multipleFiles/${image.name}`);
-
-        try {
-          const result = await uploadBytes(productImagesRef, image);
-          const downloadURL = await getDownloadURL(productImagesRef);
-          console.log("Link:", downloadURL);
-          return downloadURL;
-        } catch (error) {
-          console.error("Error uploading file:", error);
-          return null;
-        }
-      })
-      );
-  };
-
-  const handleFileChange = (ev) => {
-    setProductImages([...ev.target.files]);
-  };
-
-  const saveProduct = async (ev) => {
+  async function saveProduct(ev) {
     ev.preventDefault();
-    const data = { title, description, price };
-
-    try {
-      const response = _id
-        ? await axios.put("/api/products", { ...data, _id })
-        : await axios.post("/api/products", data);
-
-      console.log("Response:", response.data);
-
-      setGoToProducts(true);
-    } catch (error) {
-      console.error("Error saving product:", error);
+    const data = {
+      title,
+      description,
+      price,
+    };
+    if (_id) {
+      //update
+      await axios.put("/api/products", { ...data, _id });
+    } else {
+      //create
+      await axios.post("/api/products", data);
     }
-  };
-
+    setGoToProducts(true);
+  }
   if (goToProducts) {
     router.push("/products");
+  }
+
+  async function uploadImages(ev) {
+    const files = ev.target?.files;
+    if (files?.length > 0) {
+      const data = new FormData();
+      for (const file of files) {
+        data.append("file", file);
+      }
+      const res = await axios.post("/api/upload", data);
+      console.log(res.data);
+    }
   }
 
   return (
@@ -269,7 +240,7 @@ export default function ProductForm({
       />
       <label>Photos</label>
       <div className="mb-2">
-        <label className="w-24 h-24 text-center flex text-sm gap-1 text-gray-500 items-center justify-center rounded-md bg-gray-200 cursor-pointer">
+        <label className="w-24 h-24 text-center flex font-semibold text-sm gap-1 text-gray-500 items-center justify-center rounded-md bg-gray-200 cursor-pointer">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
@@ -287,13 +258,14 @@ export default function ProductForm({
           <div>Upload</div>
           <input
             type="file"
-            multiple
-            onChange={handleFileChange}
+            // multiple
+            onChange={uploadImages}
             className="hidden"
           />
         </label>
-        {!productImages?.length && <div>No Photos in this product</div>}
+        {!images?.length && <div>No Photos in this product</div>}
       </div>
+
       <label>Description</label>
       <textarea
         placeholder="Description"

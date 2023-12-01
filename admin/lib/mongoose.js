@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 
 export function mongooseConnect() {
+
+  
   if (mongoose.connection.readyState === 1) {
     return mongoose.connection.asPromise();
   } else {
@@ -8,3 +10,6 @@ export function mongooseConnect() {
     return mongoose.connect(uri);
   }
 }
+// const PORT = process.env.PORT || 8080;
+// app.listen(PORT, () => console.log("Server is running at + PORT"));
+

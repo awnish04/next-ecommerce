@@ -1,26 +1,21 @@
 import { useRouter } from "next/router";
 import axios from "axios";
 import React, { useEffect, useState } from "react";
-import { imageDb } from "../lib/firebase-config";
-import { getDownloadURL, listAll, ref, uploadBytes } from "firebase/storage";
-import { v4 } from "uuid";
-import { SHA256 } from 'crypto-js';
+import Spinner from "@/components/Spinner";
 
 export default function ProductForm({
   _id,
   title: existingTitle,
   description: existingDescription,
   price: existingPrice,
-
+  img: existingImg,
 }) {
   const [title, setTitle] = useState(existingTitle || "");
   const [description, setDescription] = useState(existingDescription || "");
   const [price, setPrice] = useState(existingPrice || "");
   const [goToProducts, setGoToProducts] = useState(false);
-  const [images, setImages] = useState([]);
-  const [firebaseImages, setFirebaseImages] = useState([]);
-  const [successMessage, setSuccessMessage] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
+  const [img, setImg] = useState(existingImg || []);
+  const [isUploading,setIsUploading] = useState(false);
 
   const router = useRouter();
 
@@ -30,6 +25,7 @@ export default function ProductForm({
       title,
       description,
       price,
+      img,
     };
     if (_id) {
       //update
@@ -44,69 +40,50 @@ export default function ProductForm({
     router.push("/products");
   }
 
-  // ...
+  const imagebase64 = async (file) => {
+    const reader = new FileReader();
+    await reader.readAsDataURL(file);
+    return new Promise((resolve, reject) => {
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = (err) => reject(err);
+    });
+  };
 
-  useEffect(() => {
-    listAll(ref(imageDb, "productimages"))
-      .then((imgs) => {
-        // Using Promise.all to wait for all getDownloadURL promises to resolve
-        return Promise.all(imgs.items.map((item) => getDownloadURL(item)));
-      })
-      .then((urls) => {
-        // urls is an array of download URLs from Firebase Storage
-        setFirebaseImages(urls);
-      })
-      .catch((error) => {
-        console.error("Error fetching image URLs:", error);
-      });
-  }, []); // Empty dependency array means this effect runs once after the initial render
+  const handleUploadImage = async (e) => {
+    const file = e.target.files[0];
+    const image = await imagebase64(file);
+    setImg(image);
+    setIsUploading(true); 
+    // Call handleSubmit directly after setting the image
+    await handleSubmit();
+    setIsUploading(false);
+  };
 
-  const handleFileSelection = async (files) => {
-    if (files.length > 0) {
-      // Assuming you want to upload all selected files
-      const uploadPromises = Array.from(files).map(async (file) => {
-        // Create a hash of the file content (you can use a library like crypto-js for this)
-        const fileContent = await file.arrayBuffer();
-        // Calculate SHA-256 hash of the file content
-      const fileHash = SHA256(fileContent).toString();
+  const handleSubmit = async () => {
+    const data = new FormData();
+    data.append("img", img);
 
-
-        // Check if the image with the same hash already exists
-        const existingImage = images.find((url) => url.hash === fileHash);
-
-        if (existingImage) {
-          // Image already exists, no need to upload again
-          return existingImage;
-        }
-
-        // Create a reference using the ref function
-        const imgRef = ref(imageDb, `productimages/${v4()}`);
-
-        // Upload the bytes
-        const uploadTask = uploadBytes(imgRef, file);
-
-        // Return a promise that resolves with the download URL and hash
-        return uploadTask.then(async (snapshot) => {
-          const url = await getDownloadURL(imgRef);
-          return { url, hash: fileHash };
-        });
-      });
-
-      // Wait for all upload promises to resolve
-      Promise.all(uploadPromises)
-        .then((urls) => {
-          // urls is an array of download URLs and hashes uploaded in the current session
-          setImages((data) => [...data, ...urls]);
-          setSuccessMessage("Images uploaded successfully!");
-        })
-        .catch((error) => {
-          console.error("Error during file upload:", error);
-          setErrorMessage("Error uploading images. Please try again.");
-        });
+    try {
+      let response;
+      if (_id) {
+        // Update
+       response = await axios.put(`/api/products?id=${_id}`, data);
+      } else {
+        // Create
+       response = await axios.post("/api/products", data);
+      }
+      // Log the server response
+    console.log("Server Response:", response.data);
+      // Optionally, you can redirect to another page or perform any other actions here
+      // setGoToProducts(true);
+    } catch (error) {
+      console.error("Error:", error);
+      // Handle error as needed
+      // setErrorMessage("Error uploading product. Please try again.");
     }
   };
-  console.log(images);
 
+  
   return (
     <form onSubmit={saveProduct}>
       <label>Product Name</label>
@@ -117,8 +94,8 @@ export default function ProductForm({
         onChange={(ev) => setTitle(ev.target.value)}
       />
       <label>Photos</label>
-      <div className="mb-2 flex flex-wrap gap-2">
-        {!!images?.length && images.map((dataVal, index) => (
+      <div className="mb-2 flex flex-wrap gap-1">
+        {/* {!!images?.length && images.map((dataVal, index) => (
           <div key={index} className="h-24" >
             <img
               className="object-cover rounded-md"
@@ -126,7 +103,25 @@ export default function ProductForm({
               alt={`Image ${index}`}
             />
           </div>
-        ))}
+        ))} */}
+
+        
+          {img && 
+          <div  className="h-24" >
+          <img
+            className="object-cover rounded-md"
+            src={img}
+          />
+        </div>
+          }
+
+          {isUploading && (
+            <div className= "h-24  flex items-center">
+              <Spinner/>
+            </div>
+          )}
+
+
         <label className="w-24 h-24 text-center flex font-semibold text-sm gap-1 text-gray-500 items-center justify-center rounded-md bg-gray-200 cursor-pointer">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -146,13 +141,11 @@ export default function ProductForm({
           <input
             type="file"
             multiple
-            onChange={(e) => handleFileSelection(e.target.files)}
+            onChange={handleUploadImage}
+            // onChange={(e) => handleFileSelection(e.target.files)}
             className="hidden"
           />
         </label>
-        {successMessage && <p style={{ color: "green" }}>{successMessage}</p>}
-        {errorMessage && <p style={{ color: "red" }}>{errorMessage}</p>}
-        {/* {imgUrl?.length && <div>No Photos in this product</div>} */}
       </div>
 
       <label>Description</label>
